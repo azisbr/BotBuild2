@@ -136,12 +136,27 @@ jobs:
             echo "✓ Patched FlutterBitmapUtils.java"
           fi
 
-          # AwesomeNotificationsPlugin.java - remove Registrar usage
+          # AwesomeNotificationsPlugin.java - replace entire registerWith with no-op stub
           PLUGIN="$AWN_DIR/AwesomeNotificationsPlugin.java"
           if [ -f "$PLUGIN" ]; then
             sed -i 's|import io.flutter.plugin.common.PluginRegistry.Registrar;||' "$PLUGIN"
-            sed -i 's|public static void registerWith(Registrar registrar)|@SuppressWarnings("deprecation") public static void registerWith(Object registrar)|' "$PLUGIN"
-            echo "✓ Patched AwesomeNotificationsPlugin.java"
+            # Replace registerWith method body - registrar.messenger() and registrar.context() broken
+            # Comment out the whole registerWith block using python for multiline
+            python3 - "$PLUGIN" << 'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path, 'r') as f:
+    code = f.read()
+# Replace registerWith(Registrar registrar) method with a no-op stub
+code = re.sub(
+    r'public static void registerWith\(Registrar registrar\)\s*\{[^}]*\}',
+    'public static void registerWith(Object registrar) { /* no-op: V1 embedding removed */ }',
+    code, flags=re.DOTALL
+)
+with open(path, 'w') as f:
+    f.write(code)
+print("✓ Patched AwesomeNotificationsPlugin.java")
+PYEOF
           fi
 
           # DartBackgroundExecutor.java - remove PluginRegistrantCallback
