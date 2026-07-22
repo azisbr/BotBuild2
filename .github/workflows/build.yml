@@ -90,7 +90,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@main
         with:
-          flutter-version: "3.27.4"
+          flutter-version: "3.41.9"
           channel: "stable"
           cache: true
 
@@ -119,6 +119,43 @@ jobs:
           if [ -f "pubspec.yaml" ]; then
             timeout 120s flutter pub get || echo "⚠️ Lanjut..."
           fi
+      - name: Patch awesome_notifications for Flutter 3.29+
+        run: |
+          AWN_DIR=$(find $HOME/.pub-cache -path "*/awesome_notifications-0.9.3+1/android/src/main/java/me/carda/awesome_notifications" -type d 2>/dev/null | head -1)
+          if [ -z "$AWN_DIR" ]; then
+            echo "awesome_notifications not found in pub cache, skipping patch"
+            exit 0
+          fi
+          echo "Patching: $AWN_DIR"
+
+          # FlutterBitmapUtils.java - fix FlutterMain -> FlutterInjector
+          BITMAP="$AWN_DIR/FlutterBitmapUtils.java"
+          if [ -f "$BITMAP" ]; then
+            sed -i 's|import io.flutter.view.FlutterMain;|import io.flutter.FlutterInjector;|' "$BITMAP"
+            sed -i 's|FlutterMain.getLookupKeyForAsset|FlutterInjector.instance().flutterLoader().getLookupKeyForAsset|g' "$BITMAP"
+            echo "✓ Patched FlutterBitmapUtils.java"
+          fi
+
+          # AwesomeNotificationsPlugin.java - remove Registrar usage
+          PLUGIN="$AWN_DIR/AwesomeNotificationsPlugin.java"
+          if [ -f "$PLUGIN" ]; then
+            sed -i 's|import io.flutter.plugin.common.PluginRegistry.Registrar;||' "$PLUGIN"
+            sed -i 's|public static void registerWith(Registrar registrar)|@SuppressWarnings("deprecation") public static void registerWith(Object registrar)|' "$PLUGIN"
+            echo "✓ Patched AwesomeNotificationsPlugin.java"
+          fi
+
+          # DartBackgroundExecutor.java - remove PluginRegistrantCallback
+          DARTBG="$AWN_DIR/DartBackgroundExecutor.java"
+          if [ -f "$DARTBG" ]; then
+            sed -i 's|import io.flutter.plugin.common.PluginRegistry.PluginRegistrantCallback;||' "$DARTBG"
+            sed -i 's|private static io.flutter.plugin.common.PluginRegistry.PluginRegistrantCallback|private static Runnable|' "$DARTBG"
+            sed -i 's|io.flutter.plugin.common.PluginRegistry.PluginRegistrantCallback callback)|Runnable callback)|g' "$DARTBG"
+            echo "✓ Patched DartBackgroundExecutor.java"
+          fi
+
+          echo "All patches done!"
+
+
 
       - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
