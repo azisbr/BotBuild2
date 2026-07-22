@@ -119,16 +119,16 @@ jobs:
           if [ -f "pubspec.yaml" ]; then
             timeout 120s flutter pub get || echo "⚠️ Lanjut..."
           fi
+
       - name: Patch awesome_notifications for Flutter 3.29+
         run: |
           AWN_DIR=$(find $HOME/.pub-cache -path "*/awesome_notifications-0.9.3+1/android/src/main/java/me/carda/awesome_notifications" -type d 2>/dev/null | head -1)
           if [ -z "$AWN_DIR" ]; then
-            echo "awesome_notifications not found in pub cache, skipping patch"
+            echo "awesome_notifications not found, skipping"
             exit 0
           fi
-          echo "Patching: $AWN_DIR"
+          echo "Found: $AWN_DIR"
 
-          # FlutterBitmapUtils.java - fix FlutterMain -> FlutterInjector
           BITMAP="$AWN_DIR/FlutterBitmapUtils.java"
           if [ -f "$BITMAP" ]; then
             sed -i 's|import io.flutter.view.FlutterMain;|import io.flutter.FlutterInjector;|' "$BITMAP"
@@ -136,17 +136,16 @@ jobs:
             echo "Patched FlutterBitmapUtils.java"
           fi
 
-          # AwesomeNotificationsPlugin.java - remove Registrar + patch registerWith
           PLUGIN="$AWN_DIR/AwesomeNotificationsPlugin.java"
           if [ -f "$PLUGIN" ]; then
             sed -i 's|import io.flutter.plugin.common.PluginRegistry.Registrar;||' "$PLUGIN"
             sed -i 's|public static void registerWith(Registrar registrar)|public static void registerWith(Object registrar)|' "$PLUGIN"
-            sed -i 's|registrar.messenger()|new io.flutter.plugin.common.BasicMessageChannel.DelegatingMessageChannel(null,null,null)|' "$PLUGIN"
-            sed -i 's|registrar.context()|null|' "$PLUGIN"
+            sed -i 's|registrar\.messenger()|null|g' "$PLUGIN"
+            sed -i 's|registrar\.context()|null|g' "$PLUGIN"
+            sed -i 's|registrar\.activity()|null|g' "$PLUGIN"
             echo "Patched AwesomeNotificationsPlugin.java"
           fi
 
-          # DartBackgroundExecutor.java - remove PluginRegistrantCallback
           DARTBG="$AWN_DIR/DartBackgroundExecutor.java"
           if [ -f "$DARTBG" ]; then
             sed -i 's|import io.flutter.plugin.common.PluginRegistry.PluginRegistrantCallback;||' "$DARTBG"
@@ -156,8 +155,6 @@ jobs:
           fi
 
           echo "All patches done!"
-
-
 
       - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
